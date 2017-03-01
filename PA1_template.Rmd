@@ -7,19 +7,117 @@ output:
 
 
 ## Loading and preprocessing the data
+```{r collapse=TRUE}
+library(lubridate)
+library(ggplot2)
+library(xtable)
+library(dplyr)
+```
 
+```{r results='asis'}
+st <- read.csv('activity.csv')
+#st$date <- ymd(st$date)
+gb <- group_by(st, date)
+by_day <- summarise(gb, sum(steps))
+names(by_day) <- c('date', 'total_steps')
+```
 
 
 ## What is mean total number of steps taken per day?
 
+The total number of steps taken per day is as follows.
+```{r results='asis'}
+xt <- xtable(by_day)
+print(xt, type='html')
+```
 
+```{r}
+qplot(total_steps, data=na.omit(by_day), geom="histogram", ylim=c(0,10), binwidth=500, xlab='Total Steps', main='Histogram of Total Steps per Day')
+```
+```{r}
+mean_steps <- as.character(round(mean(by_day$total_steps, na.rm = TRUE)))
+median_steps <- as.character(round(median(by_day$total_steps, na.rm = TRUE)))
+```
+
+The mean total number of steps taken per day is `r mean_steps`.
+
+The median total number of steps taken per day is `r median_steps`.
 
 ## What is the average daily activity pattern?
 
+```{r}
+gbi <- group_by(st, interval)
+mean_intervals <- summarise(gbi, round(mean(steps, na.rm=TRUE)))
+names(mean_intervals) <- c('interval', 'mean_steps')
+
+ggplot(mean_intervals, aes(x=interval, y=mean_steps)) + 
+    #geom_point(pch=19, size=1, alpha=0.25) + 
+    geom_line() + 
+    xlab('Interval') + 
+    ylab('Mean Steps') + 
+    labs(title = 'Mean Steps per 5-Minute Interval')
+```
+
+```{r}
+max_interval_steps <- max(mean_intervals$mean_steps)
+max_interval <- mean_intervals[mean_intervals$mean_steps==max_interval_steps,]
+max_interval <- max_interval[[1]]
+```
+
+The maximum number of steps (`r max_interval_steps`) was taken in interval `r max_interval`.
 
 
 ## Imputing missing values
 
+```{r}
+total_na <- sum(is.na(st))
+```
+
+The total number of NAs in the original data set is `r total_na`.
+
+Next, we will create a new data set, substitute the mean values for the NA intervals, and then proceed with further analysis. (I did not like doing this in a for loop, but couldn't figure out how to do it using a vectorized approach.)
+
+```{r}
+st1 <- st
+x <- which(is.na(st1))
+for(i in x) {
+    ivl <- st1[i,]$interval
+    mn <- mean_intervals[mean_intervals$interval == ivl,]$mean_steps
+    st1[i,]$steps <- mn
+}
+
+gb1 <- group_by(st1, date)
+by_day1 <- summarise(gb1, sum(steps))
+names(by_day1) <- c('date', 'total_steps')
+
+mean_steps1 <- as.character(round(mean(by_day1$total_steps, na.rm = TRUE)))
+median_steps1 <- as.character(round(median(by_day1$total_steps, na.rm = TRUE)))
+
+qplot(total_steps, data=na.omit(by_day1), geom="histogram", ylim=c(0,10), binwidth=500, xlab='Total Steps', main='Histogram of Total Steps per Day')
+```
+
+The mean total number of steps taken per day is `r mean_steps1`. The median total number of steps taken per day is `r median_steps1`. These values and the histogram above show that adding imputed values which are the mean of each interval do not materially affect the overall mean and median of steps per day.
+
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+st1$date_date <- ymd(st1$date)
+st1$date_day <- weekdays(st1$date_date, abbreviate=T)
+st1$date_type <- ifelse(st1$date_day %in% c('Sat', 'Sun'), 'Weekend', 'Weekday')
+
+#qplot(interval, steps, data=st1, facets=.~date_type)
+
+p <- ggplot(st1, aes(interval, steps)) + 
+    #geom_point(color='red', size=.5, alpha=1/2) + 
+    facet_grid(date_type ~ .) + 
+    geom_line() + 
+    xlab('Interval') + 
+    ylab('Mean Steps') + 
+    labs(title = 'Mean Steps per 5-Minute Interval')
+
+print(p)
+
+
+```
